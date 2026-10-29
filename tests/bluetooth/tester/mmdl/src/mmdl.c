@@ -7,7 +7,9 @@
  */
 
 #include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/mesh/access.h>
 #include <bluetooth/mesh/models.h>
+#include "access.h"
 
 /* Private Mesh Model headers */
 #include <model_utils.h>
@@ -149,20 +151,59 @@ static void supported_commands(uint8_t *data, uint16_t len)
 		    CONTROLLER_INDEX, buf->data, buf->len);
 }
 
-struct model_data *lookup_model_bound(uint16_t id)
+static bool model_first_app_key(const struct bt_mesh_model *mod, uint16_t *idx)
 {
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(model_bound); i++) {
-		if (model_bound[i].model->id ==
-		    BT_MESH_MODEL_ID_GEN_ONOFF_CLI) {
-			if (model_bound[i].model) {
-				return &model_bound[i];
-			}
-			break;
+	for (size_t i = 0; i < mod->keys_cnt; i++) {
+		if (mod->keys[i] != BT_MESH_KEY_UNUSED &&
+		    mod->keys[i] != BT_MESH_KEY_DEV_ANY &&
+		    !BT_MESH_IS_DEV_KEY(mod->keys[i])) {
+			*idx = mod->keys[i];
+			return true;
 		}
 	}
 
+	return false;
+}
+
+struct model_data *lookup_model_bound(uint16_t id)
+{
+	static struct model_data data;
+	const struct bt_mesh_comp *comp;
+	const struct bt_mesh_model *mod;
+
+	comp = bt_mesh_comp_get();
+	if (!comp) {
+		return NULL;
+	}
+
+	for (size_t i = 0; i < comp->elem_count; i++) {
+		mod = bt_mesh_model_find(&comp->elem[i], id);
+		if (!mod) {
+			continue;
+		}
+
+		if (!model_first_app_key(mod, &data.appkey_idx)) {
+			LOG_ERR("Model 0x%04x has no bound AppKey", id);
+			return NULL;
+		}
+
+		data.model = mod;
+
+		if (!mod->pub || mod->pub->addr == BT_MESH_ADDR_UNASSIGNED) {
+			LOG_ERR("Model 0x%04x has no destination address", id);
+			return NULL;
+		}
+
+		data.addr = mod->pub->addr;
+
+		if (mod->pub->key != BT_MESH_KEY_UNUSED) {
+			data.appkey_idx = mod->pub->key;
+		}
+
+		return &data;
+	}
+
+	LOG_ERR("Model 0x%04x not found in composition", id);
 	return NULL;
 }
 

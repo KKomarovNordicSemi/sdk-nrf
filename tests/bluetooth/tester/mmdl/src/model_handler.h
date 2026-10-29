@@ -44,11 +44,6 @@ struct model_data {
 	uint16_t appkey_idx;
 };
 
-/* Model send data */
-#define MODEL_BOUNDS_MAX 100
-
-extern struct model_data model_bound[MODEL_BOUNDS_MAX];
-
 struct net_ctx {
 	uint16_t local;
 	uint16_t dst;
