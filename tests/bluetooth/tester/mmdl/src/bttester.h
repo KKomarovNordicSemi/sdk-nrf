@@ -633,6 +633,8 @@ struct mesh_scheduler_action_set {
 	uint16_t scene_number;
 } __packed;
 
+#define MESH_MODEL_DATA_CLEAR 0xFE
+
 void tester_init(void);
 void tester_rsp(uint8_t service, uint8_t opcode, uint8_t index, uint8_t status);
 void tester_send(uint8_t service, uint8_t opcode, uint8_t index, uint8_t *data,
