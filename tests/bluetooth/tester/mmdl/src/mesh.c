@@ -1,18 +1,20 @@
 /* mesh.c - Bluetooth Mesh Tester */
 
 /*
- * Copyright (c) 2017 Intel Corporation
- *
- * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
- */
+* Copyright (c) 2017 Intel Corporation
+*
+* SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+*/
 
 #include <zephyr/bluetooth/bluetooth.h>
 
 #include <assert.h>
 #include <errno.h>
+#include <string.h>
 #include <zephyr/bluetooth/mesh.h>
 #include <zephyr/bluetooth/mesh/access.h>
 #include <zephyr/bluetooth/mesh/cfg.h>
+#include <zephyr/settings/settings.h>
 #include <zephyr/sys/byteorder.h>
 #include <app_keys.h>
 #include "access.h"
@@ -49,47 +51,50 @@ struct net_ctx net = {
 	.dst = BT_MESH_ADDR_UNASSIGNED,
 };
 
-struct net_ctx net = {
-	.local = BT_MESH_ADDR_UNASSIGNED,
-	.dst = BT_MESH_ADDR_UNASSIGNED,
-};
+/* Address of the Node that bound AppKeys to our models (PTS). It is the
+* destination for Client model messages. It is stored in settings because
+* without reprovisioning PTS does not bind AppKeys again after a reboot.
+*/
+#define TESTER_PTS_ADDR_KEY "bttester/pts_addr"
 
-static void tester_model_pub_set(const struct bt_mesh_model *model, uint16_t addr,
-				 uint16_t key_idx)
+uint16_t tester_pts_addr = BT_MESH_ADDR_UNASSIGNED;
+
+static int tester_settings_set(const char *name, size_t len, settings_read_cb read_cb,
+	void *cb_arg)
 {
-	if (!model->pub || model->pub->update) {
-		return;
+	const char *next;
+	ssize_t rc;
+
+	if (!settings_name_steq(name, "pts_addr", &next) || next) {
+		return -ENOENT;
 	}
 
-	model->pub->addr = addr;
-	model->pub->key = key_idx;
-	model->pub->ttl = BT_MESH_TTL_DEFAULT;
-	model->pub->cred = 0U;
-	model->pub->period = 0U;
-	model->pub->retransmit = 0U;
-	model->pub->count = 0U;
-
-	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		bt_mesh_model_pub_store(model);
+	if (len != sizeof(tester_pts_addr)) {
+		return -EINVAL;
 	}
+
+	rc = read_cb(cb_arg, &tester_pts_addr, sizeof(tester_pts_addr));
+
+	return (rc < 0) ? (int)rc : 0;
 }
 
-static void tester_model_pub_clear(const struct bt_mesh_model *model)
+SETTINGS_STATIC_HANDLER_DEFINE(bttester, "bttester", NULL, tester_settings_set, NULL, NULL);
+
+static void tester_pts_addr_set(uint16_t pts_addr)
 {
-	if (!model->pub || model->pub->update ||
-	    model->pub->addr == BT_MESH_ADDR_UNASSIGNED) {
+	if (tester_pts_addr == pts_addr) {
 		return;
 	}
 
-	model->pub->addr = BT_MESH_ADDR_UNASSIGNED;
-	model->pub->key = 0U;
-	model->pub->ttl = 0U;
-	model->pub->period = 0U;
-	model->pub->retransmit = 0U;
-	model->pub->count = 0U;
+	tester_pts_addr = pts_addr;
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
-		bt_mesh_model_pub_store(model);
+		if (pts_addr == BT_MESH_ADDR_UNASSIGNED) {
+			(void)settings_delete(TESTER_PTS_ADDR_KEY);
+		} else {
+			(void)settings_save_one(TESTER_PTS_ADDR_KEY, &tester_pts_addr,
+						sizeof(tester_pts_addr));
+		}
 	}
 }
 
@@ -113,6 +118,123 @@ static void tester_net_ctx_clear(void)
 	net.net_idx = 0;
 }
 
+/* Model state clean-up for the no-reprovisioning mode.
+*
+* Model states are stored as "bt/mesh/s/<id>/data[/<name>]" (SIG) and
+* "bt/mesh/v/<id>/data[/<name>]" (vendor). Only these keys are deleted:
+* keys, AppKey bindings, subscriptions and publications are kept, so PTS can
+* continue without provisioning and configuration.
+*
+* Only at the start of a Test Case: AutoPTS registers the MMDL service
+* (BTP_SERVICE_ID_MESH_MODEL) only in the Test Case pre-run. After an IUT
+* reset inside a Test Case (autopts/wid/mmdl.py iut_reset(): WID 630, 631,
+* 661, 663) GAP and MESH are registered again, and MESH_INIT,
+* MESH_CONFIG_PROVISIONING and MESH_START are sent again, but not the MMDL
+* service registration. So the states stored before the reset are loaded,
+* as the Test Case expects.
+*
+* Done in MESH_START before settings_load(), so the mesh stack loads the
+* models with their default states.
+*/
+#define MODEL_DATA_KEYS_MAX 64
+#define MODEL_DATA_KEY_LEN  48
+
+struct model_data_keys {
+	size_t cnt;
+	bool overflow;
+	char names[MODEL_DATA_KEYS_MAX][MODEL_DATA_KEY_LEN];
+};
+
+static struct model_data_keys data_keys;
+
+/* Set by the MMDL service registration, used by the next MESH_START. RAM
+* only: an IUT reset clears it.
+*/
+static bool model_data_clear_req;
+
+void tester_model_data_clear_request(void)
+{
+	model_data_clear_req = true;
+}
+
+static int model_data_key_collect(const char *key, size_t len, settings_read_cb read_cb,
+				void *cb_arg, void *param)
+{
+	struct model_data_keys *keys = param;
+	const char *field;
+	int n;
+
+	ARG_UNUSED(len);
+	ARG_UNUSED(read_cb);
+	ARG_UNUSED(cb_arg);
+
+	/* key is relative to "bt/mesh": "s/<id>/<field>[/...]" (SIG) or
+	* "v/<id>/<field>[/...]" (vendor).
+	*/
+	if (!key || (key[0] != 's' && key[0] != 'v') || key[1] != '/') {
+		return 0;
+	}
+
+	field = strchr(key + 2, '/');
+	if (!field || strncmp(field + 1, "data", 4) != 0 ||
+		(field[5] != '\0' && field[5] != '/')) {
+		return 0;
+	}
+
+	if (keys->cnt >= MODEL_DATA_KEYS_MAX) {
+		keys->overflow = true;
+		return 0;
+	}
+
+	n = snprintk(keys->names[keys->cnt], MODEL_DATA_KEY_LEN, "bt/mesh/%s", key);
+	if (n < 0 || n >= MODEL_DATA_KEY_LEN) {
+		keys->overflow = true;
+		return 0;
+	}
+
+	keys->cnt++;
+
+	return 0;
+}
+
+static int model_data_clear(void)
+{
+	int64_t start = k_uptime_get();
+	int err;
+
+	data_keys.cnt = 0;
+	data_keys.overflow = false;
+
+	/* One walk over "bt/mesh" for both SIG and vendor models: the walk
+	* reads every stored key anyway, so a second subtree means a second
+	* full walk.
+	*/
+	err = settings_load_subtree_direct("bt/mesh", model_data_key_collect, &data_keys);
+	if (err) {
+		LOG_ERR("Failed to read bt/mesh (err %d)", err);
+		return err;
+	}
+
+	/* Delete after the walk: deleting inside the load callback is not safe. */
+	for (size_t i = 0; i < data_keys.cnt; i++) {
+		err = settings_delete(data_keys.names[i]);
+		if (err) {
+			LOG_ERR("Failed to delete %s (err %d)", data_keys.names[i], err);
+			return err;
+		}
+	}
+
+	if (data_keys.overflow) {
+		LOG_ERR("Model data keys not all deleted, increase MODEL_DATA_KEYS_MAX");
+		return -ENOMEM;
+	}
+
+	printk("Model data cleared: %u keys, %lld ms\n", (unsigned int)data_keys.cnt,
+		k_uptime_get() - start);
+
+	return 0;
+}
+
 static void supported_commands(uint8_t *data, uint16_t len)
 {
 	struct net_buf_simple *buf = NET_BUF_SIMPLE(BTP_DATA_MAX_SIZE);
@@ -128,7 +250,7 @@ static void supported_commands(uint8_t *data, uint16_t len)
 	tester_set_bit(buf->data, MESH_START);
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_READ_SUPPORTED_COMMANDS,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 }
 
 static void link_open(bt_mesh_prov_bearer_t bearer)
@@ -151,7 +273,7 @@ static void link_open(bt_mesh_prov_bearer_t bearer)
 	}
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_PROV_LINK_OPEN,
-		    CONTROLLER_INDEX, (uint8_t *) &ev, sizeof(ev));
+			CONTROLLER_INDEX, (uint8_t *) &ev, sizeof(ev));
 }
 
 static void link_close(bt_mesh_prov_bearer_t bearer)
@@ -174,7 +296,7 @@ static void link_close(bt_mesh_prov_bearer_t bearer)
 	}
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_PROV_LINK_CLOSED,
-		    CONTROLLER_INDEX, (uint8_t *) &ev, sizeof(ev));
+			CONTROLLER_INDEX, (uint8_t *) &ev, sizeof(ev));
 }
 
 static int output_numeric(bt_mesh_output_action_t action, uint8_t *numeric, size_t size)
@@ -195,7 +317,7 @@ static int output_numeric(bt_mesh_output_action_t action, uint8_t *numeric, size
 	ev.number = sys_cpu_to_le32(number);
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_OUT_NUMBER_ACTION,
-		    CONTROLLER_INDEX, (uint8_t *) &ev, sizeof(ev));
+			CONTROLLER_INDEX, (uint8_t *) &ev, sizeof(ev));
 
 	return 0;
 }
@@ -215,7 +337,7 @@ static int output_string(const char *str)
 	net_buf_simple_add_mem(buf, str, ev->string_len);
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_OUT_STRING_ACTION,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 
 	return 0;
 }
@@ -232,7 +354,7 @@ static int input(bt_mesh_input_action_t action, uint8_t size)
 	ev.size = size;
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_IN_ACTION, CONTROLLER_INDEX,
-		    (uint8_t *) &ev, sizeof(ev));
+			(uint8_t *) &ev, sizeof(ev));
 
 	return 0;
 }
@@ -248,7 +370,7 @@ static void prov_complete(uint16_t net_idx, uint16_t elem_addr)
 	net.dst = elem_addr;
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_PROVISIONED, CONTROLLER_INDEX,
-		    NULL, 0);
+			NULL, 0);
 }
 
 static void prov_reset(void)
@@ -293,7 +415,7 @@ static void config_prov(uint8_t *data, uint16_t len)
 	prov.input_actions = sys_le16_to_cpu(cmd->in_actions);
 
 	tester_rsp(BTP_SERVICE_ID_MESH, MESH_CONFIG_PROVISIONING,
-		   CONTROLLER_INDEX, BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX, BTP_STATUS_SUCCESS);
 }
 
 static void init(uint8_t *data, uint16_t len)
@@ -310,7 +432,7 @@ static void init(uint8_t *data, uint16_t len)
 	}
 
 	tester_rsp(BTP_SERVICE_ID_MESH, MESH_INIT, CONTROLLER_INDEX,
-		   status);
+		status);
 }
 
 static void start(uint8_t *data, uint16_t len)
@@ -321,8 +443,22 @@ static void start(uint8_t *data, uint16_t len)
 	LOG_DBG("");
 
 	if (IS_ENABLED(CONFIG_BT_SETTINGS)) {
+		/* Each Test Case starts with default model states. Not done after
+		* an IUT reset inside a Test Case (no MMDL service registration)
+		* and not if the node is already running (MESH_START sent again
+		* without reboot).
+		*/
+		if (model_data_clear_req && !bt_mesh_is_provisioned() &&
+			model_data_clear()) {
+			status = BTP_STATUS_FAILED;
+		}
+		model_data_clear_req = false;
+
 		printk("Loading stored settings\n");
+		int64_t load_start = k_uptime_get();
+
 		settings_load();
+		printk("Settings loaded: %lld ms\n", k_uptime_get() - load_start);
 	}
 
 	/* Node already in a network (flash or current session): do not re-open PB-ADV. */
@@ -344,7 +480,7 @@ static void start(uint8_t *data, uint16_t len)
 	}
 
 	tester_rsp(BTP_SERVICE_ID_MESH, MESH_START, CONTROLLER_INDEX,
-		   status);
+		status);
 }
 
 static void reset(uint8_t *data, uint16_t len)
@@ -354,10 +490,11 @@ static void reset(uint8_t *data, uint16_t len)
 	addr = 0U;
 
 	tester_net_ctx_clear();
+	tester_pts_addr_set(BT_MESH_ADDR_UNASSIGNED);
 	bt_mesh_reset();
 
 	tester_rsp(BTP_SERVICE_ID_MESH, MESH_RESET, CONTROLLER_INDEX,
-		   BTP_STATUS_SUCCESS);
+		BTP_STATUS_SUCCESS);
 }
 
 void tester_handle_mesh(uint8_t opcode, uint8_t index, uint8_t *data, uint16_t len)
@@ -380,13 +517,13 @@ void tester_handle_mesh(uint8_t opcode, uint8_t index, uint8_t *data, uint16_t l
 		break;
 	default:
 		tester_rsp(BTP_SERVICE_ID_MESH, opcode, index,
-			   BTP_STATUS_UNKNOWN_CMD);
+			BTP_STATUS_UNKNOWN_CMD);
 		break;
 	}
 }
 
 void net_recv_ev(uint8_t ttl, uint8_t ctl, uint16_t src, uint16_t dst, const void *payload,
-		 size_t payload_len)
+		size_t payload_len)
 {
 	NET_BUF_SIMPLE_DEFINE(buf, UINT8_MAX);
 	struct mesh_net_recv_ev *ev;
@@ -408,25 +545,26 @@ void net_recv_ev(uint8_t ttl, uint8_t ctl, uint16_t src, uint16_t dst, const voi
 	net_buf_simple_add_mem(&buf, payload, payload_len);
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_NET_RECV, CONTROLLER_INDEX,
-		    buf.data, buf.len);
+			buf.data, buf.len);
 }
 
 static void model_bound_cb(uint16_t addr, const struct bt_mesh_model *model,
-			   uint16_t key_idx)
+			uint16_t key_idx)
 {
 	LOG_DBG("remote addr 0x%04x key_idx 0x%04x model %p",
 		addr, key_idx, (void *)model);
 
-	tester_model_pub_set(model, addr, key_idx);
+	/* Do not touch model publication here: a server model with publication
+	* set sends an extra status on every state change.
+	*/
+	tester_pts_addr_set(addr);
 }
 
 static void model_unbound_cb(uint16_t addr, const struct bt_mesh_model *model,
-			     uint16_t key_idx)
+				uint16_t key_idx)
 {
 	LOG_DBG("remote addr 0x%04x key_idx 0x%04x model %p",
 		addr, key_idx, (void *)model);
-
-	tester_model_pub_clear(model);
 }
 
 static void invalid_bearer_cb(uint8_t opcode)
@@ -438,13 +576,13 @@ static void invalid_bearer_cb(uint8_t opcode)
 	LOG_DBG("opcode 0x%02x", opcode);
 
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_INVALID_BEARER,
-		    CONTROLLER_INDEX, (uint8_t *) &ev, sizeof(ev));
+			CONTROLLER_INDEX, (uint8_t *) &ev, sizeof(ev));
 }
 
 static void incomp_timer_exp_cb(void)
 {
 	tester_send(BTP_SERVICE_ID_MESH, MESH_EV_INCOMP_TIMER_EXP,
-		    CONTROLLER_INDEX, NULL, 0);
+			CONTROLLER_INDEX, NULL, 0);
 }
 
 static struct bt_mesh_test_cb mesh_test_cb = {

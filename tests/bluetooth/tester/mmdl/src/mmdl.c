@@ -148,15 +148,15 @@ static void supported_commands(uint8_t *data, uint16_t len)
 	tester_set_bit(buf->data, MMDL_SCENE_RECALL);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_READ_SUPPORTED_COMMANDS,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 }
 
 static bool model_first_app_key(const struct bt_mesh_model *mod, uint16_t *idx)
 {
 	for (size_t i = 0; i < mod->keys_cnt; i++) {
 		if (mod->keys[i] != BT_MESH_KEY_UNUSED &&
-		    mod->keys[i] != BT_MESH_KEY_DEV_ANY &&
-		    !BT_MESH_IS_DEV_KEY(mod->keys[i])) {
+			mod->keys[i] != BT_MESH_KEY_DEV_ANY &&
+			!BT_MESH_IS_DEV_KEY(mod->keys[i])) {
 			*idx = mod->keys[i];
 			return true;
 		}
@@ -189,15 +189,20 @@ struct model_data *lookup_model_bound(uint16_t id)
 
 		data.model = mod;
 
-		if (!mod->pub || mod->pub->addr == BT_MESH_ADDR_UNASSIGNED) {
+		/* Publication configured by PTS takes precedence, otherwise send
+		* to the node that bound the AppKeys (PTS).
+		*/
+		if (mod->pub && mod->pub->addr != BT_MESH_ADDR_UNASSIGNED) {
+			data.addr = mod->pub->addr;
+
+			if (mod->pub->key != BT_MESH_KEY_UNUSED) {
+				data.appkey_idx = mod->pub->key;
+			}
+		} else if (tester_pts_addr != BT_MESH_ADDR_UNASSIGNED) {
+			data.addr = tester_pts_addr;
+		} else {
 			LOG_ERR("Model 0x%04x has no destination address", id);
 			return NULL;
-		}
-
-		data.addr = mod->pub->addr;
-
-		if (mod->pub->key != BT_MESH_KEY_UNUSED) {
-			data.appkey_idx = mod->pub->key;
 		}
 
 		return &data;
@@ -244,12 +249,12 @@ static void gen_onoff_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_ONOFF_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_ONOFF_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void gen_onoff_set(uint8_t *data, uint16_t len)
@@ -310,13 +315,13 @@ static void gen_onoff_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_ONOFF_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_ONOFF_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_lvl_get(uint8_t *data, uint16_t len)
@@ -354,12 +359,12 @@ static void gen_lvl_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_LVL_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_LVL_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void gen_lvl_set(uint8_t *data, uint16_t len)
@@ -421,13 +426,13 @@ static void gen_lvl_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_LVL_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_LVL_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_lvl_delta_set(uint8_t *data, uint16_t len)
@@ -489,14 +494,14 @@ static void gen_lvl_delta_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_LVL_DELTA_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_LVL_DELTA_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_lvl_move_set(uint8_t *data, uint16_t len)
@@ -558,13 +563,13 @@ static void gen_lvl_move_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_LVL_MOVE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_LVL_MOVE_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_dtt_get(uint8_t *data, uint16_t len)
@@ -601,12 +606,12 @@ static void gen_dtt_get(uint8_t *data, uint16_t len)
 
 	status = model_transition_encode(status);
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_DTT_GET, CONTROLLER_INDEX,
-		    (uint8_t *)&status, sizeof(status));
+			(uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_DTT_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void gen_dtt_set(uint8_t *data, uint16_t len)
@@ -652,14 +657,14 @@ static void gen_dtt_set(uint8_t *data, uint16_t len)
 	if (cmd->ack) {
 		status = model_transition_encode(status);
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_DTT_SET,
-			    CONTROLLER_INDEX, (uint8_t *)&status,
-			    sizeof(status));
+				CONTROLLER_INDEX, (uint8_t *)&status,
+				sizeof(status));
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_DTT_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_ponoff_get(uint8_t *data, uint16_t len)
@@ -691,12 +696,12 @@ static void gen_ponoff_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PONOFF_GET, CONTROLLER_INDEX,
-		    (uint8_t *)&status, sizeof(status));
+			(uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PONOFF_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void gen_ponoff_set(uint8_t *data, uint16_t len)
@@ -729,10 +734,10 @@ static void gen_ponoff_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_ponoff_cli_on_power_up_set(&ponoff_cli, &ctx, set,
-							 &status);
+							&status);
 	} else {
 		err = bt_mesh_ponoff_cli_on_power_up_set_unack(&ponoff_cli,
-							       &ctx, set);
+								&ctx, set);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -741,14 +746,14 @@ static void gen_ponoff_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PONOFF_SET,
-			    CONTROLLER_INDEX, (uint8_t *)&status,
-			    sizeof(status));
+				CONTROLLER_INDEX, (uint8_t *)&status,
+				sizeof(status));
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PONOFF_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_plvl_get(uint8_t *data, uint16_t len)
@@ -788,12 +793,12 @@ static void gen_plvl_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void gen_plvl_set(uint8_t *data, uint16_t len)
@@ -837,7 +842,7 @@ static void gen_plvl_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_plvl_cli_power_set(&plvl_cli, &ctx, &set,
-						 &status);
+						&status);
 	} else {
 		err = bt_mesh_plvl_cli_power_set_unack(&plvl_cli, &ctx, &set);
 	}
@@ -853,13 +858,13 @@ static void gen_plvl_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_plvl_last_get(uint8_t *data, uint16_t len)
@@ -891,12 +896,12 @@ static void gen_plvl_last_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_LAST_GET,
-		    CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
+			CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_LAST_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void gen_plvl_dflt_get(uint8_t *data, uint16_t len)
@@ -928,12 +933,12 @@ static void gen_plvl_dflt_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_DFLT_GET,
-		    CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
+			CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_DFLT_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void gen_plvl_dflt_set(uint8_t *data, uint16_t len)
@@ -966,7 +971,7 @@ static void gen_plvl_dflt_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_plvl_cli_default_set(&plvl_cli, &ctx, set,
-						   &status);
+						&status);
 	} else {
 		err = bt_mesh_plvl_cli_default_set_unack(&plvl_cli, &ctx, set);
 	}
@@ -977,15 +982,15 @@ static void gen_plvl_dflt_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_DFLT_SET,
-			    CONTROLLER_INDEX, (uint8_t *)&status,
-			    sizeof(status));
+				CONTROLLER_INDEX, (uint8_t *)&status,
+				sizeof(status));
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_DFLT_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_plvl_range_get(uint8_t *data, uint16_t len)
@@ -1025,12 +1030,12 @@ static void gen_plvl_range_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.range.max);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_RANGE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_RANGE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void gen_plvl_range_set(uint8_t *data, uint16_t len)
@@ -1065,7 +1070,7 @@ static void gen_plvl_range_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_plvl_cli_range_set(&plvl_cli, &ctx, &set,
-						 &status);
+						&status);
 	} else {
 		err = bt_mesh_plvl_cli_range_set_unack(&plvl_cli, &ctx, &set);
 	}
@@ -1081,14 +1086,14 @@ static void gen_plvl_range_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.range.max);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_RANGE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PLVL_RANGE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void battery_get(uint8_t *data, uint16_t len)
@@ -1124,12 +1129,12 @@ static void battery_get(uint8_t *data, uint16_t len)
 	net_buf_simple_init(buf, 0);
 	bt_mesh_gen_bat_encode_status(buf, &status);
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_BATTERY_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_BATTERY_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void location_global_get(uint8_t *data, uint16_t len)
@@ -1165,12 +1170,12 @@ static void location_global_get(uint8_t *data, uint16_t len)
 	net_buf_simple_init(buf_rsp, 0);
 	bt_mesh_loc_global_encode(buf_rsp, &status);
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_LOC_GLOBAL_GET,
-		    CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
+			CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_LOC_GLOBAL_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void location_local_get(uint8_t *data, uint16_t len)
@@ -1206,12 +1211,12 @@ static void location_local_get(uint8_t *data, uint16_t len)
 	net_buf_simple_init(buf_rsp, 0);
 	bt_mesh_loc_local_encode(buf_rsp, &status);
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_LOC_LOCAL_GET,
-		    CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
+			CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_LOC_LOCAL_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void location_global_set(uint8_t *data, uint16_t len)
@@ -1260,13 +1265,13 @@ static void location_global_set(uint8_t *data, uint16_t len)
 		net_buf_simple_init(buf_rsp, 0);
 		bt_mesh_loc_global_encode(buf_rsp, &status);
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_LOC_GLOBAL_SET,
-			    CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
+				CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
 		return;
 	}
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_LOC_GLOBAL_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 void location_local_set(uint8_t *data, uint16_t len)
@@ -1315,14 +1320,14 @@ void location_local_set(uint8_t *data, uint16_t len)
 		net_buf_simple_init(buf_rsp, 0);
 		bt_mesh_loc_local_encode(buf_rsp, &status);
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_LOC_LOCAL_SET,
-			    CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
+				CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_LOC_LOCAL_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void gen_props_get(uint8_t *data, uint16_t len)
@@ -1369,15 +1374,15 @@ static void gen_props_get(uint8_t *data, uint16_t len)
 	}
 	net_buf_simple_init(buf, 0);
 	net_buf_simple_add_mem(buf, status.ids,
-			       sizeof(*status.ids) * status.count);
+				sizeof(*status.ids) * status.count);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PROPS_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PROPS_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void gen_prop_get(uint8_t *data, uint16_t len)
@@ -1423,12 +1428,12 @@ static void gen_prop_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_u8(buf, status.size);
 	net_buf_simple_add_mem(buf, status.value, status.size);
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PROP_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PROP_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void gen_prop_set(uint8_t *data, uint16_t len)
@@ -1482,16 +1487,16 @@ static void gen_prop_set(uint8_t *data, uint16_t len)
 	case BT_MESH_PROP_SRV_KIND_MFR:
 		if (cmd->ack) {
 			err = bt_mesh_prop_cli_mfr_prop_set(&prop_cli, &ctx,
-							    &prop, &status);
+								&prop, &status);
 		} else {
 			err = bt_mesh_prop_cli_mfr_prop_set_unack(&prop_cli,
-								  &ctx, &prop);
+								&ctx, &prop);
 		}
 		break;
 	case BT_MESH_PROP_SRV_KIND_ADMIN:
 		if (cmd->ack) {
 			err = bt_mesh_prop_cli_admin_prop_set(&prop_cli, &ctx,
-							      &status, &status);
+								&status, &status);
 		} else {
 			err = bt_mesh_prop_cli_admin_prop_set_unack(
 				&prop_cli, &ctx, &status);
@@ -1500,7 +1505,7 @@ static void gen_prop_set(uint8_t *data, uint16_t len)
 	case BT_MESH_PROP_SRV_KIND_USER:
 		if (cmd->ack) {
 			err = bt_mesh_prop_cli_user_prop_set(&prop_cli, &ctx,
-							     &status, &status);
+								&status, &status);
 		} else {
 			err = bt_mesh_prop_cli_user_prop_set_unack(
 				&prop_cli, &ctx, &status);
@@ -1523,13 +1528,13 @@ static void gen_prop_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_u8(buf, status.size);
 		net_buf_simple_add_mem(buf, status.value, status.size);
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_GEN_PROP_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_GEN_PROP_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void sensor_desc_get(uint8_t *data, uint16_t len)
@@ -1567,10 +1572,10 @@ static void sensor_desc_get(uint8_t *data, uint16_t len)
 		}
 
 		err = bt_mesh_sensor_cli_desc_get(&sensor_cli, &ctx,
-						  sensor.type, &rsp);
+						sensor.type, &rsp);
 	} else {
 		err = bt_mesh_sensor_cli_desc_all_get(&sensor_cli, &ctx,
-						      sensors, &count);
+							sensors, &count);
 	}
 
 	if (err) {
@@ -1585,7 +1590,7 @@ static void sensor_desc_get(uint8_t *data, uint16_t len)
 		sensor_descriptor_encode(buf, &sensor);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_DESC_GET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 	} else {
 		for (i = 0; i < count; ++i) {
 			sensor.type = bt_mesh_sensor_type_get(sensors[i].id);
@@ -1596,13 +1601,13 @@ static void sensor_desc_get(uint8_t *data, uint16_t len)
 			sensor_descriptor_encode(buf, &sensor);
 		}
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_DESC_GET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 	}
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_DESC_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void sensor_get(uint8_t *data, uint16_t len)
@@ -1643,7 +1648,7 @@ static void sensor_get(uint8_t *data, uint16_t len)
 		err = bt_mesh_sensor_cli_get(&sensor_cli, &ctx, sensor, value);
 	} else {
 		err = bt_mesh_sensor_cli_all_get(&sensor_cli, &ctx, values,
-						 &count);
+						&count);
 	}
 
 	if (err) {
@@ -1661,7 +1666,7 @@ static void sensor_get(uint8_t *data, uint16_t len)
 		}
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_GET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 	} else {
 		for (i = 0; i < count; ++i) {
 			sensor = bt_mesh_sensor_type_get(values[i].type->id);
@@ -1672,19 +1677,19 @@ static void sensor_get(uint8_t *data, uint16_t len)
 
 			net_buf_simple_add_le16(buf, values[i].type->id);
 			err = sensor_value_encode(buf, sensor,
-						  values[i].value);
+						values[i].value);
 			if (err) {
 				goto fail;
 			}
 		}
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_GET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 	}
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void sensor_cadence_get(uint8_t *data, uint16_t len)
@@ -1726,7 +1731,7 @@ static void sensor_cadence_get(uint8_t *data, uint16_t len)
 	}
 	net_buf_simple_init(buf, 0);
 	err = sensor_cadence_encode(buf, sensor, rsp.fast_period_div,
-				    rsp.min_int, &rsp.threshold);
+					rsp.min_int, &rsp.threshold);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
@@ -1734,12 +1739,12 @@ static void sensor_cadence_get(uint8_t *data, uint16_t len)
 
 	net_buf_simple_add_le16(buf, sensor->id);
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_CADENCE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_CADENCE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void sensor_cadence_set(uint8_t *data, uint16_t len)
@@ -1781,7 +1786,7 @@ static void sensor_cadence_set(uint8_t *data, uint16_t len)
 	}
 
 	err = sensor_cadence_decode(buf, sensor, &cadence.fast_period_div,
-				    &cadence.min_int, &cadence.threshold);
+					&cadence.min_int, &cadence.threshold);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
@@ -1789,10 +1794,10 @@ static void sensor_cadence_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_sensor_cli_cadence_set(&sensor_cli, &ctx, sensor,
-						     &cadence, &cadence);
+							&cadence, &cadence);
 	} else {
 		err = bt_mesh_sensor_cli_cadence_set_unack(&sensor_cli, &ctx,
-							   sensor, &cadence);
+							sensor, &cadence);
 	}
 
 	if (err) {
@@ -1803,22 +1808,22 @@ static void sensor_cadence_set(uint8_t *data, uint16_t len)
 	if (cmd->ack) {
 		net_buf_simple_init(buf_rsp, 0);
 		err = sensor_cadence_encode(buf_rsp, sensor,
-					    cadence.fast_period_div,
-					    cadence.min_int,
-					    &cadence.threshold);
+						cadence.fast_period_div,
+						cadence.min_int,
+						&cadence.threshold);
 		if (err) {
 			LOG_ERR("err=%d", err);
 			goto fail;
 		}
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_CADENCE_SET,
-			    CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
+				CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_CADENCE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void sensor_settings_get(uint8_t *data, uint16_t len)
@@ -1856,7 +1861,7 @@ static void sensor_settings_get(uint8_t *data, uint16_t len)
 	}
 
 	err = bt_mesh_sensor_cli_settings_get(&sensor_cli, &ctx, sensor, ids,
-					      &count);
+						&count);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
@@ -1869,12 +1874,12 @@ static void sensor_settings_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_SETTINGS_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_SETTINGS_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void sensor_setting_get(uint8_t *data, uint16_t len)
@@ -1919,7 +1924,7 @@ static void sensor_setting_get(uint8_t *data, uint16_t len)
 	}
 
 	err = bt_mesh_sensor_cli_setting_get(&sensor_cli, &ctx, sensor,
-					     setting, &rsp);
+						setting, &rsp);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
@@ -1927,8 +1932,8 @@ static void sensor_setting_get(uint8_t *data, uint16_t len)
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_SETTING_GET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void sensor_setting_set(uint8_t *data, uint16_t len)
@@ -1985,7 +1990,7 @@ static void sensor_setting_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_sensor_cli_setting_set(&sensor_cli, &ctx, sensor,
-						     setting, &value, &rsp);
+							setting, &value, &rsp);
 	} else {
 		err = bt_mesh_sensor_cli_setting_set_unack(
 			&sensor_cli, &ctx, sensor, setting, &value);
@@ -1998,8 +2003,8 @@ static void sensor_setting_set(uint8_t *data, uint16_t len)
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_SETTING_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 struct sensor_value val_to_sensorval(int val)
@@ -2063,7 +2068,7 @@ static void sensor_column_get(uint8_t *data, uint16_t len)
 	}
 
 	err = bt_mesh_sensor_cli_series_entry_get(&sensor_cli, &ctx, sensor,
-						  &column, &rsp);
+						&column, &rsp);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
@@ -2098,12 +2103,12 @@ static void sensor_column_get(uint8_t *data, uint16_t len)
 	}
 send:
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_COLUMN_GET,
-		    CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
+			CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_COLUMN_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void sensor_series_get(uint8_t *data, uint16_t len)
@@ -2163,7 +2168,7 @@ static void sensor_series_get(uint8_t *data, uint16_t len)
 	}
 
 	err = bt_mesh_sensor_cli_series_entries_get(&sensor_cli, &ctx, sensor, &range_start,
-						    &range_end, rsp, &count);
+							&range_end, rsp, &count);
 
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -2181,7 +2186,7 @@ static void sensor_series_get(uint8_t *data, uint16_t len)
 
 	for (i = 0; i < count; ++i) {
 		err = sensor_ch_encode(buf_rsp, col_format,
-				       &rsp[i].column.start);
+					&rsp[i].column.start);
 		if (err) {
 			LOG_ERR("err=%d", err);
 			goto fail;
@@ -2203,12 +2208,12 @@ static void sensor_series_get(uint8_t *data, uint16_t len)
 send:
 	net_buf_simple_add_le16(buf_rsp, sensor->id);
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_SERIES_GET,
-		    CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
+			CONTROLLER_INDEX, buf_rsp->data, buf_rsp->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SENSOR_SERIES_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void time_get(uint8_t *data, uint16_t len)
@@ -2245,12 +2250,12 @@ static void time_get(uint8_t *data, uint16_t len)
 	bt_mesh_time_encode_time_params(buf, &status);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_TIME_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_TIME_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void time_set(uint8_t *data, uint16_t len)
@@ -2292,12 +2297,12 @@ static void time_set(uint8_t *data, uint16_t len)
 	bt_mesh_time_encode_time_params(buf_rsp, &status);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_TIME_SET, CONTROLLER_INDEX,
-		    buf_rsp->data, buf_rsp->len);
+			buf_rsp->data, buf_rsp->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_TIME_SET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void time_role_get(uint8_t *data, uint16_t len)
@@ -2329,12 +2334,12 @@ static void time_role_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_TIME_ROLE_GET, CONTROLLER_INDEX,
-		    (uint8_t *)&status, sizeof(status));
+			(uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_TIME_ROLE_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void time_role_set(uint8_t *data, uint16_t len)
@@ -2368,12 +2373,12 @@ static void time_role_set(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_TIME_ROLE_SET, CONTROLLER_INDEX,
-		    (uint8_t *)&status, sizeof(status));
+			(uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_TIME_ROLE_SET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void time_zone_get(uint8_t *data, uint16_t len)
@@ -2411,12 +2416,12 @@ static void time_zone_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le64(buf, status.time_zone_change.timestamp);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_TIME_ZONE_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_TIME_ZONE_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void time_zone_set(uint8_t *data, uint16_t len)
@@ -2458,12 +2463,12 @@ static void time_zone_set(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le64(buf, status.time_zone_change.timestamp);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_TIME_ZONE_SET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_TIME_ZONE_SET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void time_tai_utc_delta_get(uint8_t *data, uint16_t len)
@@ -2501,12 +2506,12 @@ static void time_tai_utc_delta_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le64(buf, status.tai_utc_change.timestamp);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_TIME_TAI_UTC_DELTA_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_TIME_TAI_UTC_DELTA_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void time_tai_utc_delta_set(uint8_t *data, uint16_t len)
@@ -2538,7 +2543,7 @@ static void time_tai_utc_delta_set(uint8_t *data, uint16_t len)
 	set.timestamp = cmd->timestamp;
 
 	err = bt_mesh_time_cli_tai_utc_delta_set(&time_cli, &ctx, &set,
-						 &status);
+						&status);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
@@ -2549,12 +2554,12 @@ static void time_tai_utc_delta_set(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le64(buf, status.tai_utc_change.timestamp);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_TIME_TAI_UTC_DELTA_SET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_TIME_TAI_UTC_DELTA_SET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lightness_get(uint8_t *data, uint16_t len)
@@ -2592,12 +2597,12 @@ static void light_lightness_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lightness_set(uint8_t *data, uint16_t len)
@@ -2641,10 +2646,10 @@ static void light_lightness_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_lightness_cli_light_set(&lightness_cli, &ctx,
-						      &set, &status);
+							&set, &status);
 	} else {
 		err = bt_mesh_lightness_cli_light_set_unack(&lightness_cli,
-							    &ctx, &set);
+								&ctx, &set);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -2657,14 +2662,14 @@ static void light_lightness_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_lightness_linear_get(uint8_t *data, uint16_t len)
@@ -2705,12 +2710,12 @@ static void light_lightness_linear_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, target);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_LINEAR_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_LINEAR_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lightness_linear_set(uint8_t *data, uint16_t len)
@@ -2755,7 +2760,7 @@ static void light_lightness_linear_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = lightness_cli_light_set(&lightness_cli, &ctx, LINEAR,
-					      &set, &status);
+						&set, &status);
 
 		current = to_linear(status.current);
 		target = to_linear(status.target);
@@ -2767,7 +2772,7 @@ static void light_lightness_linear_set(uint8_t *data, uint16_t len)
 
 	} else {
 		err = lightness_cli_light_set_unack(&lightness_cli, &ctx,
-						    LINEAR, &set);
+							LINEAR, &set);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -2776,15 +2781,15 @@ static void light_lightness_linear_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		tester_send(BTP_SERVICE_ID_MMDL,
-			    MMDL_LIGHT_LIGHTNESS_LINEAR_SET, CONTROLLER_INDEX,
-			    buf->data, buf->len);
+				MMDL_LIGHT_LIGHTNESS_LINEAR_SET, CONTROLLER_INDEX,
+				buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_LINEAR_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_lightness_last_get(uint8_t *data, uint16_t len)
@@ -2816,12 +2821,12 @@ static void light_lightness_last_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_LAST_GET,
-		    CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
+			CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_LAST_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lightness_default_get(uint8_t *data, uint16_t len)
@@ -2853,12 +2858,12 @@ static void light_lightness_default_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_DEFAULT_GET,
-		    CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
+			CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_DEFAULT_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lightness_default_set(uint8_t *data, uint16_t len)
@@ -2891,7 +2896,7 @@ static void light_lightness_default_set(uint8_t *data, uint16_t len)
 							cmd->dflt, &status);
 	} else {
 		err = bt_mesh_lightness_cli_default_set_unack(&lightness_cli,
-							      &ctx, cmd->dflt);
+								&ctx, cmd->dflt);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -2900,15 +2905,15 @@ static void light_lightness_default_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		tester_send(BTP_SERVICE_ID_MMDL,
-			    MMDL_LIGHT_LIGHTNESS_DEFAULT_SET, CONTROLLER_INDEX,
-			    (uint8_t *)&status, sizeof(status));
+				MMDL_LIGHT_LIGHTNESS_DEFAULT_SET, CONTROLLER_INDEX,
+				(uint8_t *)&status, sizeof(status));
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_DEFAULT_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_lightness_range_get(uint8_t *data, uint16_t len)
@@ -2945,12 +2950,12 @@ static void light_lightness_range_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.range.min);
 	net_buf_simple_add_le16(buf, status.range.max);
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_RANGE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_RANGE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lightness_range_set(uint8_t *data, uint16_t len)
@@ -2985,7 +2990,7 @@ static void light_lightness_range_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_lightness_cli_range_set(&lightness_cli, &ctx,
-						      &set, &status);
+							&set, &status);
 
 		net_buf_simple_init(buf, 0);
 		net_buf_simple_add_le16(buf, status.status);
@@ -2994,7 +2999,7 @@ static void light_lightness_range_set(uint8_t *data, uint16_t len)
 
 	} else {
 		err = bt_mesh_lightness_cli_range_set_unack(&lightness_cli,
-							    &ctx, &set);
+								&ctx, &set);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -3003,14 +3008,14 @@ static void light_lightness_range_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_RANGE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LIGHTNESS_RANGE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_lc_mode_get(uint8_t *data, uint16_t len)
@@ -3041,12 +3046,12 @@ static void light_lc_mode_get(uint8_t *data, uint16_t len)
 		goto fail;
 	}
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_MODE_GET,
-		    CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
+			CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_MODE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lc_mode_set(uint8_t *data, uint16_t len)
@@ -3076,7 +3081,7 @@ static void light_lc_mode_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_ctrl_cli_mode_set(&light_ctrl_cli, &ctx,
-						      !!cmd->enabled, &status);
+							!!cmd->enabled, &status);
 	} else {
 		err = bt_mesh_light_ctrl_cli_mode_set_unack(
 			&light_ctrl_cli, &ctx, !!cmd->enabled);
@@ -3087,15 +3092,15 @@ static void light_lc_mode_set(uint8_t *data, uint16_t len)
 	}
 	if (cmd->ack) {
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_MODE_SET,
-			    CONTROLLER_INDEX, (uint8_t *)&status,
-			    sizeof(status));
+				CONTROLLER_INDEX, (uint8_t *)&status,
+				sizeof(status));
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_MODE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_lc_occupancy_mode_get(uint8_t *data, uint16_t len)
@@ -3121,19 +3126,19 @@ static void light_lc_occupancy_mode_get(uint8_t *data, uint16_t len)
 	ctx.app_idx = model_bound->appkey_idx;
 
 	err = bt_mesh_light_ctrl_cli_occupancy_enabled_get(&light_ctrl_cli,
-							   &ctx, &status);
+							&ctx, &status);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_OCCUPANCY_MODE_GET,
-		    CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
+			CONTROLLER_INDEX, (uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_OCCUPANCY_MODE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lc_occupancy_mode_set(uint8_t *data, uint16_t len)
@@ -3175,15 +3180,15 @@ static void light_lc_occupancy_mode_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		tester_send(BTP_SERVICE_ID_MMDL,
-			    MMDL_LIGHT_LC_OCCUPANCY_MODE_SET, CONTROLLER_INDEX,
-			    (uint8_t *)&status, sizeof(status));
+				MMDL_LIGHT_LC_OCCUPANCY_MODE_SET, CONTROLLER_INDEX,
+				(uint8_t *)&status, sizeof(status));
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_OCCUPANCY_MODE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_lc_light_onoff_mode_get(uint8_t *data, uint16_t len)
@@ -3210,7 +3215,7 @@ static void light_lc_light_onoff_mode_get(uint8_t *data, uint16_t len)
 	ctx.app_idx = model_bound->appkey_idx;
 
 	err = bt_mesh_light_ctrl_cli_light_onoff_get(&light_ctrl_cli, &ctx,
-						     &status);
+							&status);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
@@ -3222,12 +3227,12 @@ static void light_lc_light_onoff_mode_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_LIGHT_ONOFF_MODE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_LIGHT_ONOFF_MODE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lc_light_onoff_mode_set(uint8_t *data, uint16_t len)
@@ -3287,15 +3292,15 @@ static void light_lc_light_onoff_mode_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL,
-			    MMDL_LIGHT_LC_LIGHT_ONOFF_MODE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				MMDL_LIGHT_LC_LIGHT_ONOFF_MODE_SET,
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_LIGHT_ONOFF_MODE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_lc_property_get(uint8_t *data, uint16_t len)
@@ -3326,7 +3331,7 @@ static void light_lc_property_get(uint8_t *data, uint16_t len)
 	id = (enum bt_mesh_light_ctrl_prop)cmd->id;
 
 	err = bt_mesh_light_ctrl_cli_prop_get(&light_ctrl_cli, &ctx, id,
-					      &status);
+						&status);
 	if (err) {
 		LOG_ERR("err=%d", err);
 		goto fail;
@@ -3347,12 +3352,12 @@ static void light_lc_property_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_PROPERTY_GET,
-		    CONTROLLER_INDEX, rsp_buf->data, rsp_buf->len);
+			CONTROLLER_INDEX, rsp_buf->data, rsp_buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_PROPERTY_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_lc_property_set(uint8_t *data, uint16_t len)
@@ -3402,10 +3407,10 @@ static void light_lc_property_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_ctrl_cli_prop_set(&light_ctrl_cli, &ctx, id,
-						      &val, &status);
+							&val, &status);
 	} else {
 		err = bt_mesh_light_ctrl_cli_prop_set_unack(&light_ctrl_cli,
-							    &ctx, id, &val);
+								&ctx, id, &val);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -3422,14 +3427,14 @@ static void light_lc_property_set(uint8_t *data, uint16_t len)
 		}
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_PROPERTY_SET,
-			    CONTROLLER_INDEX, rsp_buf->data, rsp_buf->len);
+				CONTROLLER_INDEX, rsp_buf->data, rsp_buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_LC_PROPERTY_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_ctl_states_get(uint8_t *data, uint16_t len)
@@ -3470,13 +3475,13 @@ static void light_ctl_states_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_STATES_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_STATES_GET,
-		   CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		CONTROLLER_INDEX,
+		BTP_STATUS_FAILED);
 }
 
 static void light_ctl_states_set(uint8_t *data, uint16_t len)
@@ -3524,7 +3529,7 @@ static void light_ctl_states_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_ctl_set(&light_ctl_cli, &ctx, &set,
-					    &status);
+						&status);
 	} else {
 		err = bt_mesh_light_ctl_set_unack(&light_ctl_cli, &ctx, &set);
 	}
@@ -3542,14 +3547,14 @@ static void light_ctl_states_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_STATES_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_STATES_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_ctl_temperature_get(uint8_t *data, uint16_t len)
@@ -3590,13 +3595,13 @@ static void light_ctl_temperature_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_TEMPERATURE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_TEMPERATURE_GET,
-		   CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		CONTROLLER_INDEX,
+		BTP_STATUS_FAILED);
 }
 
 static void light_ctl_temperature_set(uint8_t *data, uint16_t len)
@@ -3643,7 +3648,7 @@ static void light_ctl_temperature_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_temp_set(&light_ctl_cli, &ctx, &set,
-					     &status);
+						&status);
 	} else {
 		err = bt_mesh_light_temp_set_unack(&light_ctl_cli, &ctx, &set);
 	}
@@ -3661,14 +3666,14 @@ static void light_ctl_temperature_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_TEMPERATURE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_TEMPERATURE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_ctl_default_get(uint8_t *data, uint16_t len)
@@ -3707,13 +3712,13 @@ static void light_ctl_default_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.delta_uv);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_DEFAULT_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_DEFAULT_GET,
-		   CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		CONTROLLER_INDEX,
+		BTP_STATUS_FAILED);
 }
 static void light_ctl_default_set(uint8_t *data, uint16_t len)
 {
@@ -3747,10 +3752,10 @@ static void light_ctl_default_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_ctl_default_set(&light_ctl_cli, &ctx, &set,
-						    &status);
+							&status);
 	} else {
 		err = bt_mesh_light_ctl_default_set_unack(&light_ctl_cli, &ctx,
-							  &set);
+							&set);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -3763,14 +3768,14 @@ static void light_ctl_default_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.delta_uv);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_DEFAULT_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_DEFAULT_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_ctl_temp_range_get(uint8_t *data, uint16_t len)
@@ -3809,13 +3814,13 @@ static void light_ctl_temp_range_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.range.max);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_TEMPERATURE_RANGE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_TEMPERATURE_RANGE_GET,
-		   CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		CONTROLLER_INDEX,
+		BTP_STATUS_FAILED);
 }
 static void light_ctl_temp_range_set(uint8_t *data, uint16_t len)
 {
@@ -3849,10 +3854,10 @@ static void light_ctl_temp_range_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_temp_range_set(&light_ctl_cli, &ctx, &set,
-						   &status);
+						&status);
 	} else {
 		err = bt_mesh_light_temp_range_set_unack(&light_ctl_cli, &ctx,
-							 &set);
+							&set);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -3865,15 +3870,15 @@ static void light_ctl_temp_range_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.range.max);
 
 		tester_send(BTP_SERVICE_ID_MMDL,
-			    MMDL_LIGHT_CTL_TEMPERATURE_RANGE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				MMDL_LIGHT_CTL_TEMPERATURE_RANGE_SET,
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_CTL_TEMPERATURE_RANGE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void scene_get(uint8_t *data, uint16_t len)
@@ -3913,12 +3918,12 @@ static void scene_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_SCENE_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SCENE_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void scene_register_get(uint8_t *data, uint16_t len)
@@ -3958,13 +3963,13 @@ static void scene_register_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_mem(buf, &status.scenes, status.count);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_SCENE_REGISTER_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SCENE_REGISTER_GET,
-		   CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		CONTROLLER_INDEX,
+		BTP_STATUS_FAILED);
 }
 
 static void scene_store_procedure(uint8_t *data, uint16_t len)
@@ -4011,14 +4016,14 @@ static void scene_store_procedure(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.current);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_SCENE_STORE_PROCEDURE,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SCENE_STORE_PROCEDURE,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void scene_recall(uint8_t *data, uint16_t len)
@@ -4062,10 +4067,10 @@ static void scene_recall(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_scene_cli_recall(&scene_cli, &ctx, scene, set,
-					       &status);
+						&status);
 	} else {
 		err = bt_mesh_scene_cli_recall_unack(&scene_cli, &ctx, scene,
-						     set);
+							set);
 	}
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -4080,13 +4085,13 @@ static void scene_recall(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_SCENE_RECALL,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SCENE_RECALL, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_xyl_get(uint8_t *data, uint16_t len)
@@ -4126,12 +4131,12 @@ static void light_xyl_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void light_xyl_set(uint8_t *data, uint16_t len)
@@ -4194,13 +4199,13 @@ static void light_xyl_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_xyl_target_get(uint8_t *data, uint16_t len)
@@ -4240,12 +4245,12 @@ static void light_xyl_target_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_TARGET_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_TARGET_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_xyl_default_get(uint8_t *data, uint16_t len)
@@ -4284,12 +4289,12 @@ static void light_xyl_default_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.xy.y);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_DEFAULT_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_DEFAULT_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_xyl_default_set(uint8_t *data, uint16_t len)
@@ -4325,7 +4330,7 @@ static void light_xyl_default_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_xyl_default_set(&xyl_cli, &ctx, &set,
-						    &status);
+							&status);
 	} else {
 		err = bt_mesh_light_xyl_default_set_unack(&xyl_cli, &ctx, &set);
 	}
@@ -4342,14 +4347,14 @@ static void light_xyl_default_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.xy.y);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_DEFAULT_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_DEFAULT_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_xyl_range_get(uint8_t *data, uint16_t len)
@@ -4390,12 +4395,12 @@ static void light_xyl_range_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.range.max.y);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_RANGE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_RANGE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_xyl_range_set(uint8_t *data, uint16_t len)
@@ -4432,7 +4437,7 @@ static void light_xyl_range_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_xyl_range_set(&xyl_cli, &ctx, &set,
-						  &status);
+						&status);
 	} else {
 		err = bt_mesh_light_xyl_range_set_unack(&xyl_cli, &ctx, &set);
 	}
@@ -4451,14 +4456,14 @@ static void light_xyl_range_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.range.max.y);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_RANGE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_XYL_RANGE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_hsl_get(uint8_t *data, uint16_t len)
@@ -4498,12 +4503,12 @@ static void light_hsl_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_GET, CONTROLLER_INDEX,
-		    buf->data, buf->len);
+			buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 
 static void light_hsl_set(uint8_t *data, uint16_t len)
@@ -4549,7 +4554,7 @@ static void light_hsl_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_hsl_set(&light_hsl_cli, &ctx, &set,
-					    &status);
+						&status);
 	} else {
 		err = bt_mesh_light_hsl_set_unack(&light_hsl_cli, &ctx, &set);
 	}
@@ -4567,13 +4572,13 @@ static void light_hsl_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_SET, CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_hsl_target_get(uint8_t *data, uint16_t len)
@@ -4613,12 +4618,12 @@ static void light_hsl_target_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_TARGET_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_TARGET_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_hsl_default_get(uint8_t *data, uint16_t len)
@@ -4657,12 +4662,12 @@ static void light_hsl_default_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.saturation);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_DEFAULT_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_DEFAULT_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_hsl_default_set(uint8_t *data, uint16_t len)
@@ -4698,10 +4703,10 @@ static void light_hsl_default_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_hsl_default_set(&light_hsl_cli, &ctx, &set,
-						    &status);
+							&status);
 	} else {
 		err = bt_mesh_light_hsl_default_set_unack(&light_hsl_cli, &ctx,
-							  &set);
+							&set);
 	}
 
 	if (err) {
@@ -4716,14 +4721,14 @@ static void light_hsl_default_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.saturation);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_DEFAULT_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_DEFAULT_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_hsl_range_get(uint8_t *data, uint16_t len)
@@ -4764,12 +4769,12 @@ static void light_hsl_range_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.range.max.saturation);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_RANGE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_RANGE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_hsl_range_set(uint8_t *data, uint16_t len)
@@ -4806,7 +4811,7 @@ static void light_hsl_range_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_hsl_range_set(&light_hsl_cli, &ctx, &set,
-						  &status);
+						&status);
 	} else {
 		err = bt_mesh_light_hsl_range_set_unack(&light_hsl_cli, &ctx,
 							&set);
@@ -4826,14 +4831,14 @@ static void light_hsl_range_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.range.max.saturation);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_RANGE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_RANGE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_hsl_hue_get(uint8_t *data, uint16_t len)
@@ -4872,12 +4877,12 @@ static void light_hsl_hue_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_HUE_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_HUE_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_hsl_hue_set(uint8_t *data, uint16_t len)
@@ -4921,7 +4926,7 @@ static void light_hsl_hue_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_hue_set(&light_hsl_cli, &ctx, &set,
-					    &status);
+						&status);
 	} else {
 		err = bt_mesh_light_hue_set_unack(&light_hsl_cli, &ctx, &set);
 	}
@@ -4938,14 +4943,14 @@ static void light_hsl_hue_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_HUE_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_HUE_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void light_hsl_saturation_get(uint8_t *data, uint16_t len)
@@ -4984,12 +4989,12 @@ static void light_hsl_saturation_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le32(buf, status.remaining_time);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_SATURATION_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_SATURATION_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 
 static void light_hsl_saturation_set(uint8_t *data, uint16_t len)
@@ -5033,10 +5038,10 @@ static void light_hsl_saturation_set(uint8_t *data, uint16_t len)
 
 	if (cmd->ack) {
 		err = bt_mesh_light_saturation_set(&light_hsl_cli, &ctx, &set,
-						   &status);
+						&status);
 	} else {
 		err = bt_mesh_light_saturation_set_unack(&light_hsl_cli, &ctx,
-							 &set);
+							&set);
 	}
 
 	if (err) {
@@ -5051,14 +5056,14 @@ static void light_hsl_saturation_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le32(buf, status.remaining_time);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_SATURATION_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_LIGHT_HSL_SATURATION_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 static void scheduler_get(uint8_t *data, uint16_t len)
@@ -5091,12 +5096,12 @@ static void scheduler_get(uint8_t *data, uint16_t len)
 	}
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_SCHEDULER_GET, CONTROLLER_INDEX,
-		    (uint8_t *)&status, sizeof(status));
+			(uint8_t *)&status, sizeof(status));
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SCHEDULER_GET, CONTROLLER_INDEX,
-		   BTP_STATUS_FAILED);
+		BTP_STATUS_FAILED);
 }
 static void scheduler_action_get(uint8_t *data, uint16_t len)
 {
@@ -5123,7 +5128,7 @@ static void scheduler_action_get(uint8_t *data, uint16_t len)
 	ctx.app_idx = model_bound->appkey_idx;
 
 	err = bt_mesh_scheduler_cli_action_get(&scheduler_cli, &ctx, cmd->index,
-					       &status);
+						&status);
 
 	if (err) {
 		LOG_ERR("err=%d", err);
@@ -5143,12 +5148,12 @@ static void scheduler_action_get(uint8_t *data, uint16_t len)
 	net_buf_simple_add_le16(buf, status.scene_number);
 
 	tester_send(BTP_SERVICE_ID_MMDL, MMDL_SCHEDULER_ACTION_GET,
-		    CONTROLLER_INDEX, buf->data, buf->len);
+			CONTROLLER_INDEX, buf->data, buf->len);
 	return;
 
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SCHEDULER_ACTION_GET,
-		   CONTROLLER_INDEX, BTP_STATUS_FAILED);
+		CONTROLLER_INDEX, BTP_STATUS_FAILED);
 }
 static void scheduler_action_set(uint8_t *data, uint16_t len)
 {
@@ -5214,13 +5219,13 @@ static void scheduler_action_set(uint8_t *data, uint16_t len)
 		net_buf_simple_add_le16(buf, status.scene_number);
 
 		tester_send(BTP_SERVICE_ID_MMDL, MMDL_SCHEDULER_ACTION_SET,
-			    CONTROLLER_INDEX, buf->data, buf->len);
+				CONTROLLER_INDEX, buf->data, buf->len);
 		return;
 	}
 fail:
 	tester_rsp(BTP_SERVICE_ID_MMDL, MMDL_SCHEDULER_ACTION_SET,
-		   CONTROLLER_INDEX,
-		   err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
+		CONTROLLER_INDEX,
+		err ? BTP_STATUS_FAILED : BTP_STATUS_SUCCESS);
 }
 
 void tester_handle_mmdl(uint8_t opcode, uint8_t index, uint8_t *data,
@@ -5511,13 +5516,15 @@ void tester_handle_mmdl(uint8_t opcode, uint8_t index, uint8_t *data,
 		break;
 	default:
 		tester_rsp(BTP_SERVICE_ID_MMDL, opcode, index,
-			   BTP_STATUS_UNKNOWN_CMD);
+			BTP_STATUS_UNKNOWN_CMD);
 		break;
 	}
 }
 
 uint8_t tester_init_mmdl(void)
 {
+	tester_model_data_clear_request();
+
 	return BTP_STATUS_SUCCESS;
 }
 
